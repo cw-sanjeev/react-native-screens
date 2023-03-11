@@ -160,6 +160,27 @@ public class ScreenContainer<T extends ScreenFragment> extends ViewGroup {
     return null;
   }
 
+  private FragmentManager findFragmentManagerForReactRootView(ReactRootView reactRootView) {
+    Context context = reactRootView.getContext();
+    while (!(context instanceof FragmentActivity) && context instanceof ContextWrapper) {
+      context = ((ContextWrapper) context).getBaseContext();
+    }
+
+    if (!(context instanceof FragmentActivity)) {
+      throw new IllegalStateException("In order to use RNScreens components your app's activity need to extend ReactFragmentActivity or ReactCompatActivity");
+    }
+
+    if (((FragmentActivity) context).getSupportFragmentManager().getFragments().isEmpty()) {
+      return ((FragmentActivity) context).getSupportFragmentManager();
+    } else {
+      try {
+        return FragmentManager.findFragment(reactRootView).getChildFragmentManager();
+      } catch (IllegalStateException ex) {
+        return ((FragmentActivity) context).getSupportFragmentManager();
+      }
+    }
+  }
+
   private void setFragmentManager(FragmentManager fm) {
     mFragmentManager = fm;
     updateIfNeeded();
@@ -176,6 +197,9 @@ public class ScreenContainer<T extends ScreenFragment> extends ViewGroup {
     if (parent instanceof Screen) {
       ScreenFragment screenFragment = ((Screen) parent).getFragment();
       mParentScreenFragment = screenFragment;
+      if (mParentScreenFragment == null) {
+        throw new IllegalStateException("Parent Screen does not have its Fragment attached");
+      }
       mParentScreenFragment.registerChildScreenContainer(this);
       setFragmentManager(screenFragment.getChildFragmentManager());
       return;
@@ -191,15 +215,7 @@ public class ScreenContainer<T extends ScreenFragment> extends ViewGroup {
     }
     // ReactRootView is expected to be initialized with the main React Activity as a context but
     // in case of Expo the activity is wrapped in ContextWrapper and we need to unwrap it
-    Context context = ((ReactRootView) parent).getContext();
-    while (!(context instanceof FragmentActivity) && context instanceof ContextWrapper) {
-      context = ((ContextWrapper) context).getBaseContext();
-    }
-    if (!(context instanceof FragmentActivity)) {
-      throw new IllegalStateException(
-              "In order to use RNScreens components your app's activity need to extend ReactFragmentActivity or ReactCompatActivity");
-    }
-    setFragmentManager(((FragmentActivity) context).getSupportFragmentManager());
+    setFragmentManager(findFragmentManagerForReactRootView((ReactRootView) parent));
   }
 
   protected FragmentTransaction getOrCreateTransaction() {
